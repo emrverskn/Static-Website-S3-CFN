@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  This CFN file is used for creating a template which runs S3 webhosting using CloudFront distribution.
+Parameters:
+
+  KittensCarousel:
+    Description: Full domain name like kittenscarousel.merveriskin.com
+    Type: String
+    AllowedPattern: (?!-)[a-zA-Z0-9-.]{1,63}(?<!-)
+  
+Resources:
+  MrvS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref KittensCarousel
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+
+  MrvS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MrvS3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 's3:GetObject'
+            Effect: Allow
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref MrvS3Bucket
+                - /*
+            Principal: '*'
+
+  MyCloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases: 
+          - !Ref KittensCarousel
+        Comment: My first CloudFront CFN
+        DefaultCacheBehavior: 
+          AllowedMethods:
+               - GET
+               - HEAD
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+          TargetOriginId: mrvcrf
+          ViewerProtocolPolicy: allow-all
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        Origins: 
+          - CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+            DomainName: !Select [2, !Split ["/", !GetAtt MrvS3Bucket.WebsiteURL]]
+            Id: mrvcrf
+        PriceClass: PriceClass_All
+        ViewerCertificate: 
+          AcmCertificateArn: arn:aws:acm:us-east-1:952813204183:certificate/327db5dc-1ba0-4522-9b9c-86d903991a87
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+
+  MyRoute53:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: Z09362793KKS4P9X1ZGP5
+      RecordSets: 
+      - AliasTarget:
+          DNSName: !GetAtt MyCloudFront.DomainName
+          HostedZoneId: Z2FDTNDATAQYW2
+        Name: !Ref KittensCarousel
+        Type: A
+
+Outputs:
+  BucketName: 
+    Description: S3 Bucket URL for Kittens Website
+    Value: !GetAtt MrvS3Bucket.WebsiteURL
+  CloudfrontEndpoint:
+    Description: Endpoint for Kittens Cloudfront
+    Value: !GetAtt MyCloudFront.DomainName
+  FullDomainName:
+    Description: Full Domain Name of my Application
+    Value: !Ref KittensCarousel
